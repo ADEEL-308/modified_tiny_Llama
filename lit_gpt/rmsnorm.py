@@ -2,7 +2,10 @@ import torch
 # Copyright (c) 2022, Tri Dao.
 # Adapted from https://github.com/NVIDIA/apex/blob/master/apex/contrib/layer_norm/layer_norm.py AND https://github.com/Dao-AILab/flash-attention/blob/7a983df74215e035e566e37125b0a71e3618f39d/flash_attn/ops/layer_norm.py#L16
 
-import dropout_layer_norm
+try:
+    import dropout_layer_norm
+except ImportError:
+    dropout_layer_norm = None
 import torch
 from torch.nn import init
 
@@ -31,6 +34,28 @@ def _dropout_add_layer_norm_forward(
     x0mat = x0.view((-1, hidden_size))
     residualmat = residual.view((-1, hidden_size)) if residual is not None else None
     rowscale = rowscale.view(-1) if rowscale is not None else None
+    
+    if dropout_layer_norm is None:
+        # Fallback PyTorch implementation when C extension is not available
+        x = x0mat
+        if residual is not None:
+            x = x + residualmat
+        if is_rms_norm:
+            # RMSNorm
+            norm_x = torch.mean(x * x, dim=-1, keepdim=True)
+            x_normed = x * torch.rsqrt(norm_x + epsilon)
+            zmat = gamma * x_normed
+        else:
+            # LayerNorm
+            mu = x.mean(dim=-1, keepdim=True)
+            var = ((x - mu) ** 2).mean(dim=-1, keepdim=True)
+            rsigma = torch.rsqrt(var + epsilon)
+            x_normed = (x - mu) * rsigma
+            zmat = gamma * x_normed
+            if beta is not None:
+                zmat = zmat + beta
+        return zmat, x0mat, None, None, None
+    
     zmat, xmat, dmask, mu, rsigma = dropout_layer_norm.dropout_add_ln_fwd(
         x0mat,
         residualmat,
@@ -801,6 +826,11 @@ class DropoutAddLayerNorm(torch.nn.Module):
         )
         
 def rms_norm(x, weight, epsilon):
+    if dropout_layer_norm is None:
+        # Fallback to pure PyTorch implementation when C extension is not available
+        norm_x = torch.mean(x * x, dim=-1, keepdim=True)
+        x_normed = x * torch.rsqrt(norm_x + epsilon)
+        return weight * x_normed
     return DropoutAddLayerNormFn.apply(
         x, None, weight, None, None, None, 0.0, epsilon, False, False, True
     )

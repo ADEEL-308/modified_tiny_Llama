@@ -1,17 +1,34 @@
-__pycache__
-.idea
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# Model checkpoints (too large for GitHub)
+checkpoints/
+*.pth
+*.bin
+*.safetensors
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
-*.egg-info
-build
-.venv
-.vscode
+Thumbs.db
 
-# data
-data
-checkpoints
-out
-wandb
+# Logs
+*.log
+wandb/
 
-tests/original_falcon_40b.py
-sft/output
-sft/wandb
+# Temp files
+*.tmp
+*.temp
+
+# Keep results but ignore large files
+# exact_research_data.json  # Uncomment if you want to exclude results
